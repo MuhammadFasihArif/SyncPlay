@@ -1,0 +1,73 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <title>SyncPlay Extension</title>
+  <style>
+    body {
+      font-family: Arial, sans-serif;
+      width: 250px;
+      padding: 15px;
+      background: #0a0a0a;
+      color: #fff;
+      margin: 0;
+    }
+    h2 { margin-top: 0; font-size: 16px; color: #6366f1; }
+    .status { font-size: 14px; margin-bottom: 10px; }
+    .status-active { color: #22c55e; }
+    .status-inactive { color: #ef4444; }
+    button {
+      background: #6366f1;
+      color: white;
+      border: none;
+      padding: 8px 12px;
+      border-radius: 6px;
+      cursor: pointer;
+      width: 100%;
+    }
+    button:hover { background: #4f46e5; }
+    
+    .input-group { margin-bottom: 10px; }
+    input {
+      width: 100%;
+      padding: 8px;
+      box-sizing: border-box;
+      background: #171717;
+      border: 1px solid #404040;
+      color: white;
+      border-radius: 4px;
+      margin-top: 5px;
+    }
+  </style>
+</head>
+<body>
+  <h2>SyncPlay</h2>
+  <div class="status" id="statusText">Status: <span class="status-inactive">Disconnected</span></div>
+  
+  <div id="manualForm">
+    <div class="input-group">
+      <label>Server URL</label>
+      <input type="text" id="serverUrl" value="http://localhost:3001" />
+    </div>
+    
+    <div class="input-group">
+      <label>Room ID</label>
+      <input type="text" id="roomId" placeholder="e.g. ABC123" />
+    </div>
+    
+    <div class="input-group">
+      <label>Username</label>
+      <input type="text" id="username" placeholder="Your Name" />
+    </div>
+
+    <button id="connectBtn">Connect & Sync Video</button>
+  </div>
+
+  <div id="autoManaged" style="display: none; text-align: center; margin-top: 15px;">
+    <p style="color: #a3a3a3; font-size: 13px;">SyncPlay is connected and managing your sync automatically behind the scenes.</p>
+    <button id="disconnectBtn" style="background: #3f3f46; margin-top: 10px;">Disconnect</button>
+  </div>
+
+  <script src="popup.js"></script>
+</body>
+</html>

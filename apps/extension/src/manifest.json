@@ -1,0 +1,38 @@
+{
+  "manifest_version": 3,
+  "name": "SyncPlay Extension",
+  "version": "1.0.0",
+  "description": "Universal Video Detection Engine for syncing video playback on any site.",
+  "action": {
+    "default_popup": "popup.html"
+  },
+  "background": {
+    "service_worker": "background.js"
+  },
+  "content_scripts": [
+    {
+      "matches": ["<all_urls>"],
+      "js": ["content.js"],
+      "all_frames": true
+    }
+  ],
+  "permissions": [
+    "storage",
+    "activeTab",
+    "scripting",
+    "declarativeNetRequest",
+    "declarativeNetRequestWithHostAccess"
+  ],
+  "host_permissions": [
+    "<all_urls>"
+  ],
+  "declarative_net_request": {
+    "rule_resources": [
+      {
+        "id": "ruleset_1",
+        "enabled": true,
+        "path": "rules.json"
+      }
+    ]
+  }
+}
