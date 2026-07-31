@@ -13,7 +13,7 @@ class SocketService {
     const targetUrl = url || SERVER_URL;
 
     // Check if we are already connected to this URL
-    if (this.socket && this.currentUrl === targetUrl) {
+    if (this.socket && this.currentUrl === targetUrl && this.socket.connected) {
       return this.socket;
     }
 
@@ -22,7 +22,11 @@ class SocketService {
     }
     
     this.currentUrl = targetUrl;
-    this.socket = io(targetUrl);
+    this.socket = io(targetUrl, {
+      transports: ["websocket", "polling"],
+      reconnectionAttempts: 5,
+      timeout: 5000,
+    });
     return this.socket;
   }
 

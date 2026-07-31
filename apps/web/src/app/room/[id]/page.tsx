@@ -215,6 +215,7 @@ export default function RoomPage({ params }: { params: Promise<{ id: string }> }
   const initialized = useRef(false);
   const localStream = useRef<MediaStream | null>(null);
   const peerConnections = useRef(new Map<string, RTCPeerConnection>());
+  const pendingCandidates = useRef(new Map<string, RTCIceCandidateInit[]>());
   const videoRef = useRef<HTMLVideoElement>(null);
   
   // Remove extension credentials broadcast as we pivot to WebRTC native model
@@ -228,7 +229,6 @@ export default function RoomPage({ params }: { params: Promise<{ id: string }> }
 
     const username = localStorage.getItem("wp_username");
     const serverUrl = localStorage.getItem("wp_server_url");
-    const isCreating = localStorage.getItem("wp_is_host") === "true";
     const avatar = localStorage.getItem("wp_avatar") || "👤";
 
     if (!username || !serverUrl) {
@@ -237,8 +237,11 @@ export default function RoomPage({ params }: { params: Promise<{ id: string }> }
     }
 
     // Host must ALWAYS bypass their own Windows Firewall by using localhost
-    // Viewers will use the Tailscale serverUrl
-    const connectionUrl = isCreating ? "http://localhost:3001" : serverUrl;
+    // We can reliably detect the host because they access the app via localhost:3000
+    const isLocalhost = typeof window !== 'undefined' && 
+      (window.location.hostname === "localhost" || window.location.hostname === "127.0.0.1");
+    
+    const connectionUrl = isLocalhost ? "http://localhost:3001" : serverUrl;
     const socket = socketService.connect(connectionUrl);
 
     socket.once("connect_error", () => {
@@ -253,27 +256,31 @@ export default function RoomPage({ params }: { params: Promise<{ id: string }> }
       if (response.success) {
         setRoom(response.room);
         const currentUser = response.room.users.find((u: User) => u.id === socket.id);
-        setIsHost(currentUser?.isHost || false);
+        const amIHost = currentUser?.isHost || response.room.hostId === socket.id;
+        setIsHost(amIHost);
       } else {
         setError(response.error || "Failed to join room");
       }
     };
 
-    if (!initialized.current) {
-      initialized.current = true;
-      if (isCreating) {
-        socket.emit("create-room", { roomId, username, avatar }, handleRoomData);
-        localStorage.removeItem("wp_is_host"); // prevent recreating on refresh
-      } else {
-        socket.emit("join-room", { roomId, username, avatar }, handleRoomData);
-      }
-    }
+    socket.emit("join-room", { roomId, username, avatar }, handleRoomData);
   }, [roomId, router]);
 
   // WebRTC Peer Connection Factory
   const createPeerConnection = (targetId: string, initiator: boolean) => {
+    if (peerConnections.current.has(targetId)) {
+      try {
+        peerConnections.current.get(targetId)?.close();
+      } catch (e) {}
+    }
+
     const pc = new RTCPeerConnection({
-      iceServers: [{ urls: "stun:stun.l.google.com:19302" }]
+      iceServers: [
+        { urls: "stun:stun.l.google.com:19302" },
+        { urls: "stun:stun1.l.google.com:19302" },
+        { urls: "stun:stun2.l.google.com:19302" },
+        { urls: "stun:stun.services.mozilla.com" }
+      ]
     });
 
     peerConnections.current.set(targetId, pc);
@@ -305,9 +312,16 @@ export default function RoomPage({ params }: { params: Promise<{ id: string }> }
       pc.ontrack = (event) => {
         if (videoRef.current) {
           videoRef.current.srcObject = event.streams[0];
-          videoRef.current.play().catch(() => {
-            console.warn("Video autoplay blocked - requires interaction");
-            setAutoplayBlocked(true);
+          videoRef.current.play().catch(async (err) => {
+            console.warn("Video autoplay blocked by browser, falling back to muted playback:", err);
+            if (videoRef.current) {
+              videoRef.current.muted = true;
+              try {
+                await videoRef.current.play();
+              } catch (e) {
+                setAutoplayBlocked(true);
+              }
+            }
           });
           setIsReceivingStream(true);
         }
@@ -440,21 +454,53 @@ export default function RoomPage({ params }: { params: Promise<{ id: string }> }
 
     // WebRTC Signaling Listeners
     socket.on("webrtc-offer", async ({ offer, from }) => {
-      const pc = createPeerConnection(from, false);
-      await pc.setRemoteDescription(offer);
-      const answer = await pc.createAnswer();
-      await pc.setLocalDescription(answer);
-      socket.emit("webrtc-answer", { answer, to: from });
+      try {
+        const pc = createPeerConnection(from, false);
+        await pc.setRemoteDescription(offer);
+        
+        // Flush any queued ICE candidates for this peer connection
+        const queued = pendingCandidates.current.get(from) || [];
+        for (const candidate of queued) {
+          await pc.addIceCandidate(candidate).catch(e => console.warn("Error adding queued ICE candidate:", e));
+        }
+        pendingCandidates.current.delete(from);
+
+        const answer = await pc.createAnswer();
+        await pc.setLocalDescription(answer);
+        socket.emit("webrtc-answer", { answer, to: from });
+      } catch (err) {
+        console.error("Error handling WebRTC offer:", err);
+      }
     });
 
     socket.on("webrtc-answer", async ({ answer, from }) => {
-      const pc = peerConnections.current.get(from);
-      if (pc) await pc.setRemoteDescription(answer);
+      try {
+        const pc = peerConnections.current.get(from);
+        if (pc) {
+          await pc.setRemoteDescription(answer);
+          
+          // Flush any queued ICE candidates for this peer connection
+          const queued = pendingCandidates.current.get(from) || [];
+          for (const candidate of queued) {
+            await pc.addIceCandidate(candidate).catch(e => console.warn("Error adding queued ICE candidate:", e));
+          }
+          pendingCandidates.current.delete(from);
+        }
+      } catch (err) {
+        console.error("Error handling WebRTC answer:", err);
+      }
     });
 
     socket.on("webrtc-candidate", async ({ candidate, from }) => {
       const pc = peerConnections.current.get(from);
-      if (pc) await pc.addIceCandidate(candidate);
+      if (pc && pc.remoteDescription && pc.remoteDescription.type) {
+        await pc.addIceCandidate(candidate).catch(e => console.warn("Error adding ICE candidate:", e));
+      } else {
+        if (!pendingCandidates.current.has(from)) {
+          pendingCandidates.current.set(from, []);
+        }
+        pendingCandidates.current.get(from)!.push(candidate);
+      }
     });
 
     // Voice Signaling Listeners
@@ -485,6 +531,7 @@ export default function RoomPage({ params }: { params: Promise<{ id: string }> }
     });
 
     return () => {
+      initialized.current = false;
       socket.off("user-joined", onUserJoined);
       socket.off("user-left", onUserLeft);
       socket.off("room-updated", onRoomUpdated);

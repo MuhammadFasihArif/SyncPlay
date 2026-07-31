@@ -32,7 +32,7 @@ class RoomManager {
     const room = this.rooms.get(roomId);
     if (!room) return null;
 
-    let isHost = false;
+    let isHost = room.hostId === userId || (room.users.get(userId)?.isHost ?? false);
     if (room.users.size === 0) {
       isHost = true;
       room.hostId = userId;

@@ -68,25 +68,37 @@ export default function Home() {
     
     const socket = socketService.connect(hostServerUrl);
     
+    let isFinished = false;
+    const timeout = setTimeout(() => {
+      if (!isFinished) {
+        isFinished = true;
+        setIsLoading(false);
+        alert("Connection to backend timed out. Please verify that the backend server is running on port 3001.");
+      }
+    }, 6000);
+
     const onConnectError = (err: any) => {
+      if (isFinished) return;
+      isFinished = true;
+      clearTimeout(timeout);
       setIsLoading(false);
       socket.off("connect_error", onConnectError);
-      if (serverUrl.includes("100.")) {
-        alert("Failed to connect to the Host! Please ensure that TAILSCALE is connected and running on your device, and that the IP address is correct.");
-      } else {
-        alert("Failed to connect to the server. Please check the URL.");
-      }
+      alert("Failed to connect to backend server. Make sure port 3001 is accessible.");
     };
     
     socket.once("connect_error", onConnectError);
     
     socket.emit("create-room", { roomId: newRoomId, username, avatar }, (response: any) => {
+      if (isFinished) return;
+      isFinished = true;
+      clearTimeout(timeout);
       socket.off("connect_error", onConnectError);
-      if (response.success) {
+      
+      if (response && response.success) {
         router.push(`/room/${newRoomId}`);
       } else {
         setIsLoading(false);
-        alert(response.error || "Failed to create room");
+        alert(response?.error || "Failed to create room");
       }
     });
   };
@@ -103,7 +115,19 @@ export default function Home() {
     
     const socket = socketService.connect(serverUrl);
     
+    let isFinished = false;
+    const timeout = setTimeout(() => {
+      if (!isFinished) {
+        isFinished = true;
+        setIsLoading(false);
+        alert("Connection to host timed out. Please verify that the host's server is reachable.");
+      }
+    }, 6000);
+
     const onConnectError = (err: any) => {
+      if (isFinished) return;
+      isFinished = true;
+      clearTimeout(timeout);
       setIsLoading(false);
       socket.off("connect_error", onConnectError);
       if (serverUrl.includes("100.")) {
@@ -116,12 +140,16 @@ export default function Home() {
     socket.once("connect_error", onConnectError);
     
     socket.emit("join-room", { roomId: roomId.toUpperCase(), username, avatar }, (response: any) => {
+      if (isFinished) return;
+      isFinished = true;
+      clearTimeout(timeout);
       socket.off("connect_error", onConnectError);
-      if (response.success) {
+      
+      if (response && response.success) {
         router.push(`/room/${roomId.toUpperCase()}`);
       } else {
         setIsLoading(false);
-        alert(response.error || "Failed to join room");
+        alert(response?.error || "Failed to join room");
       }
     });
   };
