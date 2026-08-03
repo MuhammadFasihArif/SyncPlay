@@ -3,7 +3,7 @@
 import { useEffect, useState, use, useRef } from "react";
 import { useRouter } from "next/navigation";
 import { socketService } from "@/lib/socket";
-import { Users, Crown, Settings, LogOut, Copy, Check, PlaySquare, Maximize, PictureInPicture, MessageSquare, Heart, Laugh, Flame, Send, Wand2, Phone, PhoneOff, Mic, MicOff, MonitorUp, Play } from "lucide-react";
+import { Users, Crown, Settings, LogOut, Copy, Check, PlaySquare, Maximize, PictureInPicture, MessageSquare, Heart, Laugh, Flame, Send, Wand2, Phone, PhoneOff, Mic, MicOff, MonitorUp, Play, Volume2, VolumeX } from "lucide-react";
 import { motion, AnimatePresence } from "framer-motion";
 
 interface User {
@@ -76,6 +76,7 @@ export default function RoomPage({ params }: { params: Promise<{ id: string }> }
   const [copied, setCopied] = useState(false);
   const [broadcasting, setBroadcasting] = useState(false);
   const [isReceivingStream, setIsReceivingStream] = useState(false);
+  const [isStreamMuted, setIsStreamMuted] = useState(false);
   
   // New States for Features
   const [activeTab, setActiveTab] = useState<'members' | 'chat'>('members');
@@ -316,6 +317,7 @@ export default function RoomPage({ params }: { params: Promise<{ id: string }> }
             console.warn("Video autoplay blocked by browser, falling back to muted playback:", err);
             if (videoRef.current) {
               videoRef.current.muted = true;
+              setIsStreamMuted(true);
               try {
                 await videoRef.current.play();
               } catch (e) {
@@ -679,6 +681,13 @@ export default function RoomPage({ params }: { params: Promise<{ id: string }> }
     }
   };
 
+  const toggleStreamMute = () => {
+    if (videoRef.current) {
+      videoRef.current.muted = !videoRef.current.muted;
+      setIsStreamMuted(videoRef.current.muted);
+    }
+  };
+
   const togglePiP = async () => {
     try {
       if (document.pictureInPictureElement) {
@@ -805,6 +814,15 @@ export default function RoomPage({ params }: { params: Promise<{ id: string }> }
                     playsInline 
                     className={`w-full h-full object-contain transition-all duration-500 ${enhanceMode ? 'contrast-[1.15] saturate-[1.2] brightness-[1.05]' : ''}`}
                   />
+                  {isStreamMuted && !isHost && (
+                    <button 
+                      onClick={toggleStreamMute} 
+                      className="absolute top-6 left-1/2 -translate-x-1/2 bg-red-600/90 hover:bg-red-500 text-white px-4 py-2 rounded-full flex items-center space-x-2 text-sm font-bold shadow-lg shadow-red-600/20 border border-red-500/50 z-[100] animate-bounce"
+                    >
+                      <VolumeX className="w-4 h-4 animate-pulse" />
+                      <span>Click to Unmute Broadcast Audio</span>
+                    </button>
+                  )}
                   {autoplayBlocked && (
                     <div 
                       className="absolute inset-0 bg-black/80 z-[100] flex flex-col items-center justify-center cursor-pointer backdrop-blur-sm"
@@ -854,6 +872,15 @@ export default function RoomPage({ params }: { params: Promise<{ id: string }> }
                             peerConnections.current.clear();
                           }} className="p-3 bg-red-600/80 hover:bg-red-500 backdrop-blur-md rounded-xl text-white transition-all shadow-xl border border-red-500/50" title="Stop Broadcast">
                             <LogOut className="w-5 h-5" />
+                          </button>
+                        )}
+                        {!isHost && (
+                          <button 
+                            onClick={toggleStreamMute} 
+                            className={`p-3 backdrop-blur-md rounded-xl transition-all shadow-xl border ${isStreamMuted ? 'bg-red-500/20 text-red-400 border-red-500/50 shadow-[0_0_15px_rgba(239,68,68,0.3)]' : 'bg-neutral-900/80 text-white border-neutral-700/50 hover:bg-indigo-600 hover:border-indigo-500/50'}`}
+                            title={isStreamMuted ? "Unmute Stream Audio" : "Mute Stream Audio"}
+                          >
+                            {isStreamMuted ? <VolumeX className="w-5 h-5" /> : <Volume2 className="w-5 h-5" />}
                           </button>
                         )}
                         <button onClick={() => setEnhanceMode(!enhanceMode)} className={`p-3 backdrop-blur-md rounded-xl transition-all shadow-xl border ${enhanceMode ? 'bg-amber-500/20 text-amber-400 border-amber-500/50 shadow-[0_0_15px_rgba(245,158,11,0.3)]' : 'bg-neutral-900/80 text-white border-neutral-700/50 hover:bg-indigo-600 hover:border-indigo-500/50'}`} title="Enhance Visuals">
